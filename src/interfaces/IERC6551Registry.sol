@@ -2,29 +2,16 @@
 pragma solidity ^0.8.0;
 
 interface IERC6551Registry {
-    event AccountCreated(
-        address account,
-        address implementation,
-        uint256 chainId,
-        address tokenContract,
-        uint256 tokenId,
-        uint256 salt
-    );
 
-    function createAccount(
-        address implementation,
-        uint256 chainId,
-        address tokenContract,
-        uint256 tokenId,
-        uint256 seed,
-        bytes calldata initData
-    ) external returns (address);
+    function proxyCallAccount(
+        bytes32 salt, 
+        address[] memory targets, 
+        uint256[] memory values, 
+        bytes[] memory calldatas
+    ) external returns(bytes[] memory outputs);
 
     function account(
-        address implementation,
-        uint256 chainId,
-        address tokenContract,
-        uint256 tokenId,
-        uint256 salt
+        bytes32 salt, 
+        address caller
     ) external view returns (address);
 }

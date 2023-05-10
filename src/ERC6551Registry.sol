@@ -1,63 +1,37 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "openzeppelin-contracts/utils/Create2.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 
 import "./interfaces/IERC6551Registry.sol";
-import "./lib/ERC6551BytecodeLib.sol";
+import "./interfaces/IERC6551Account.sol";
+import "./ERC6551Account.sol";
 
 contract ERC6551Registry is IERC6551Registry {
-    error InitializationFailed();
 
-    function createAccount(
-        address implementation,
-        uint256 chainId,
-        address tokenContract,
-        uint256 tokenId,
-        uint256 salt,
-        bytes calldata initData
-    ) external returns (address) {
-        bytes memory code = ERC6551BytecodeLib.getCreationCode(
-            implementation,
-            chainId,
-            tokenContract,
-            tokenId,
-            salt
-        );
+    /// Address to use for EIP-1167 smart-wallet creation calls
+    address public immutable TEMPLATE;
 
-        address _account = Create2.computeAddress(bytes32(salt), keccak256(code));
+    constructor() {
+        TEMPLATE = address(new ERC6551Account());
+    }
 
-        if (_account.code.length != 0) return _account;
-
-        emit AccountCreated(_account, implementation, chainId, tokenContract, tokenId, salt);
-
-        _account = Create2.deploy(0, bytes32(salt), code);
-
-        if (initData.length != 0) {
-            (bool success, ) = _account.call(initData);
-            if (!success) revert InitializationFailed();
-        }
-
-        return _account;
+    function proxyCallAccount(
+        bytes32 salt, 
+        address[] memory targets, 
+        uint256[] memory values, 
+        bytes[] memory calldatas
+    ) external returns(bytes[] memory outputs) {
+        IERC6551Account wallet = IERC6551Account(Clones.cloneDeterministic(TEMPLATE, keccak256(abi.encode(salt, msg.sender))));
+        //Proxy the calls through and selfDestruct itself when finished
+        outputs = wallet.executeCall(targets, values, calldatas);
+        wallet.cleanMemory();
     }
 
     function account(
-        address implementation,
-        uint256 chainId,
-        address tokenContract,
-        uint256 tokenId,
-        uint256 salt
-    ) external view returns (address) {
-        bytes32 bytecodeHash = keccak256(
-            ERC6551BytecodeLib.getCreationCode(
-                implementation,
-                chainId,
-                tokenContract,
-                tokenId,
-                salt
-            )
-        );
-
-        return Create2.computeAddress(bytes32(salt), bytecodeHash);
+        bytes32 salt, 
+        address caller
+    ) external view returns (address smartWallet) {
+        smartWallet = Clones.predictDeterministicAddress(TEMPLATE, keccak256(abi.encode(salt, caller)));
     }
 }
